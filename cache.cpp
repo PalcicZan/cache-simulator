@@ -1,17 +1,17 @@
-#include "precomp.h"
+#include	"precomp.h"
 
 // instantiate the cache
 Cache cache;
 
 // helper functions; forward all requests to the cache
-uint LOADINT(uint* address) { return cache.Read32bit((uint)address); }
-void STOREINT(uint* address, uint value) { cache.Write32bit((uint)address, value); }
-float LOADFLOAT(float* a) { uint v = LOADINT((uint*)a); return *(float*)&v; }
-void STOREFLOAT(float* a, float f) { uint v = *(uint*)&f; STOREINT((uint*)a, v); }
-vec3 LOADVEC(vec3* a) { vec3 r; for (int i = 0; i < 4; i++) r.cell[i] = LOADFLOAT((float*)a + i); return r; }
-void STOREVEC(vec3* a, vec3 t) { for (int i = 0; i < 4; i++) { float v = t.cell[i]; STOREFLOAT((float*)a + i, v); } }
-void* LOADPTR(void* a) { uint v = LOADINT((uint*)a); return *(void**)&v; }
-void STOREPTR(void* a, void* p) { uint v = *(uint*)&p; STOREINT((uint*)a, v); }
+uint LOADINT( uint* address ) { return cache.Read32bit( (uint)address ); }
+void STOREINT( uint* address, uint value ) { cache.Write32bit( (uint)address, value ); }
+float LOADFLOAT( float* a ) { uint v = LOADINT( (uint*)a ); return *(float*)&v; }
+void STOREFLOAT( float* a, float f ) { uint v = *(uint*)&f; STOREINT( (uint*)a, v ); }
+vec3 LOADVEC( vec3* a ) { vec3 r; for( int i = 0; i < 4; i++ ) r.cell[i] = LOADFLOAT( (float*)a + i ); return r; }
+void STOREVEC( vec3* a, vec3 t ) { for( int i = 0; i < 4; i++ ) { float v = t.cell[i]; STOREFLOAT( (float*)a + i, v ); } }
+void* LOADPTR( void* a ) { uint v = LOADINT( (uint*)a ); return *(void**)&v; }
+void STOREPTR( void* a, void* p ) { uint v = *(uint*)&p; STOREINT( (uint*)a, v ); }
 
 // ============================================================================
 // CACHE SIMULATOR IMPLEMENTATION
@@ -155,18 +155,20 @@ int Cache::RandomReplacement() {
 // CACHE SIMULATOR LOW LEVEL MEMORY ACCESS WITH LATENCY SIMULATION
 // ============================================================================
 
+uint* RAM = (uint*)MALLOC64( 20 * 1024 * 1024 ); // simulated RAM
+
 // load a cache line from memory; simulate RAM latency
-void Cache::LoadLineFromMem(uint address, CacheLine& line)
+void Cache::LoadLineFromMem( uint address, CacheLine& line )
 {
-	uint lineAddress = address & 0xFFFFFFC0; // set last six bit to 0
-	memcpy(line.data, (void*)lineAddress, 64); // fetch 64 bytes into line
-	DELAY;
+    uint lineAddress = address & 0xFFFFFFC0; // set last six bit to 0
+    memcpy( line.data, (void*)lineAddress, 64 ); // fetch 64 bytes into line
+    DELAY;
 }
 
 // write a cache line to memory; simulate RAM latency
-void Cache::WriteLineToMem(uint address, CacheLine& line)
+void Cache::WriteLineToMem( uint address, CacheLine& line )
 {
-	uint lineAddress = address & 0xFFFFFFC0; // set last six bit to 0
-	memcpy((void*)lineAddress, line.data, 64); // fetch 64 bytes into line
-	DELAY;
+    uint lineAddress = address & 0xFFFFFFC0; // set last six bit to 0
+    memcpy( (void*)lineAddress, line.data, 64 ); // fetch 64 bytes into line
+    DELAY;
 }

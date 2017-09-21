@@ -7,18 +7,21 @@ using namespace Tmpl8;
 
 class TreeNode;
 
-vec3 p[PARTICLES], l[PARTICLES], pt[PARTICLES];
-float pr[PARTICLES], r = 270, r2 = 270;
-uint pidx[PARTICLES], pleft[PARTICLES], pright[PARTICLES];
-uint sx[PARTICLES], sy[PARTICLES];
+extern uint* RAM;
+
+vec3* p = (vec3*)&RAM[0], *l = (vec3*)&RAM[PARTICLES * 4], *pt = (vec3*)&RAM[PARTICLES * 8];
+float* pr = (float*)&RAM[PARTICLES * 12], r = 270, r2 = 270;
+uint* pidx = (uint*)&RAM[PARTICLES * 13], *pleft = (uint*)&RAM[PARTICLES * 14], *pright = (uint*)&RAM[PARTICLES * 15];
 vec3 gmin( -115, -55, -45 ), gmax( 115, 2460, 45 );
-Surface back( SCRWIDTH, SCRHEIGHT );
-Surface ikea( "assets/back.png" );
-TreeNode* node, *root;
 Sprite* sprite[4];
-static uint ballCount[256], index[256], nodeidx;
-uint scale[15 * 15];
-uint source[PARTICLES * 2], temp[PARTICLES * 2];
+uint* ballCount = (uint*)&RAM[PARTICLES * 18], *index = (uint*)&RAM[PARTICLES * 19], nodeidx;
+uint* source = (uint*)&RAM[PARTICLES * 21], *temp = (uint*)&RAM[PARTICLES * 23];
+vec3* smin = (vec3*)&RAM[PARTICLES * 25], *smax = (vec3*)&RAM[PARTICLES * 26];
+TreeNode** snode = (TreeNode**)&RAM[PARTICLES * 28];
+TreeNode* root, *node = (TreeNode*)&RAM[PARTICLES * 29];
+Surface back( SCRWIDTH, SCRHEIGHT, (Pixel*)&RAM[PARTICLES * 40], SCRWIDTH );
+Surface ikea( SCRWIDTH, SCRHEIGHT, (Pixel*)&RAM[2048 * 1024], SCRWIDTH );
+Surface ik_( "assets/back.png" );
 
 inline void radix8 ( uint bit, uint N, uint *source, uint *dest )
 {
@@ -45,8 +48,6 @@ class TreeNode
 public:
 	void SubDiv( vec3 bmin, vec3 bmax )
 	{
-		vec3 smin[64], smax[64];
-		TreeNode* snode[64];
 		STOREVEC( &smin[0], bmin );
 		STOREVEC( &smax[0], bmax );
 		STOREPTR( &snode[0], this );
@@ -62,12 +63,15 @@ public:
 			if (ex[2] > ex[axis]) axis = 2;
 			STOREPTR( &curr->left, &node[nodeidx] );
 			nodeidx += 2;
-			float splitpos = (LOADFLOAT( &bmax.cell[axis] ) + LOADFLOAT( &bmin.cell[axis] )) * 0.5f;
+			float splitpos = (bmax.cell[axis] + bmin.cell[axis]) * 0.5f;
 			for ( uint i = 0; i < LOADINT( &curr->count ); i++ )
 			{
 				uint idx = LOADINT( &pidx[i + LOADINT( &curr->first )] );
-				if (LOADFLOAT( &p[idx].cell[axis] ) < splitpos) STOREINT( &pleft[lcount++], pidx[i + LOADINT( &curr->first )] ); 
-				else STOREINT( &pright[rcount++], pidx[i + LOADINT( &curr->first )] );
+				if (LOADFLOAT( &p[idx].cell[axis] ) < splitpos) 
+				{
+					STOREINT( &pleft[lcount++], LOADINT( &pidx[i + LOADINT( &curr->first )] ) );
+				} 
+				else STOREINT( &pright[rcount++], LOADINT( &pidx[i + LOADINT( &curr->first )] ) );
 			}
 			for( uint i = 0; i < lcount; i++ ) STOREINT( &pidx[LOADINT( &curr->first ) + i], LOADINT( &pleft[i] ) );
 			for( uint i = 0; i < rcount; i++ ) STOREINT( &pidx[LOADINT( &curr->first ) + lcount + i], LOADINT( &pright[i] ) );
@@ -78,8 +82,7 @@ public:
 			STOREINT( &(currLeft + 1)->first, LOADINT( &curr->first ) + lcount );
 			STOREINT( &(currLeft + 1)->count, rcount );
 			STOREPTR( &(currLeft + 1)->left, 0 );
-			STOREFLOAT( &lmax.cell[axis], splitpos );
-			STOREFLOAT( &rmin.cell[axis], splitpos );
+			lmax.cell[axis] = rmin.cell[axis] = splitpos;
 			if (lcount > 8) 
 			{
 				STOREPTR( &snode[stackptr], (TreeNode*)LOADPTR( &curr->left ) );
@@ -119,9 +122,7 @@ void Game::Init()
 		p[i].x = l[i].x = Rand( 15 ) - 100,
 		p[i].z = l[i].z = Rand( 30 ) - 15,
 		p[i].y = l[i].y = 2400 - Rand( 2014 ),
-		pr[i] = BALLRADIUS - Rand( 0.1f ),
-		sx[i] = 0, sy[i] = 0;
-	node = (TreeNode*)MALLOC64( sizeof( TreeNode ) * PARTICLES * 2 );
+		pr[i] = BALLRADIUS - Rand( 0.1f );
 	for( uint i = 0; i < 4; i++ ) sprite[i] = new Sprite( new Surface( 15, 15 ), 1 );
 	for ( uint y = 0; y < 15; y++ ) for ( uint x = 0; x < 15; x++ )
 	{
@@ -136,14 +137,15 @@ void Game::Init()
 	}
 	for( uint i = 0; i < 4; i++ ) sprite[i]->InitializeStartData();
 	BuildTree();
+	ik_.CopyTo( &ikea, 0, 0 );
 }
 
 void Game::Tick( float a_DT )
 {
 	uint start = GetTickCount();
 	screen->Clear( 0 );
-	Pixel* bptr = back.GetBuffer();
-	for( int i = 0; i < 655360; i++ ) back.GetBuffer()[i] = ikea.GetBuffer()[i];
+	for( int i = 0; i < 655360; i++ ) 
+		STOREINT( &back.GetBuffer()[i], LOADINT( &ikea.GetBuffer()[i] ) );
 	if (GetAsyncKeyState( VK_LEFT )) { r -= 1.8f; if (r < 0) r += 360; }
 	if (GetAsyncKeyState( VK_RIGHT )) { r += 1.8f; if (r > 360) r -= 360; }
 	if (GetAsyncKeyState( VK_UP )) { r2 -= 1.8f; if (r2 < 0) r2 += 360; }
@@ -174,7 +176,7 @@ void Game::Tick( float a_DT )
 					if ((LOADFLOAT( &p[i].cell[axis] ) - 2 * BALLRADIUS) < LOADFLOAT( &node->splitpos ))
 					{
 						if ((LOADFLOAT( &p[i].cell[axis] ) + 2 * BALLRADIUS) > LOADFLOAT( &node->splitpos )) 
-							STOREPTR( &stack[stackptr++], (TreeNode*)LOADPTR( &node->left ) + 1 );	
+							stack[stackptr++] = (TreeNode*)LOADPTR( &node->left ) + 1;	
 						node = (TreeNode*)LOADPTR( &node->left );
 					}
 					else if ((LOADFLOAT( &p[i].cell[axis] ) + 2 * BALLRADIUS) > LOADFLOAT( &node->splitpos )) 
@@ -197,15 +199,15 @@ void Game::Tick( float a_DT )
 					STOREVEC( &p[i], LOADVEC( &p[i] ) - m );
 				}
 				if (!stackptr) break;
-				node = (TreeNode*)LOADPTR( &stack[--stackptr] );
+				node = stack[--stackptr];
 			}
 			// keep away from  mouse object
 			vec3 mpos( gmin.x + ((float)mx / SCRWIDTH) * (gmax.x - gmin.x),
 					  -gmin.y + ((float)my / SCRHEIGHT) * (gmin.y + gmin.y), 0 );
 			for ( uint a = 0; a < 3; a++ )
 			{
-				STOREFLOAT( &mpos.cell[a], (LOADFLOAT( &mpos.cell[a] ) < LOADFLOAT( &gmin.cell[a] )) ? LOADFLOAT( &gmin.cell[a] ) : LOADFLOAT( &mpos.cell[a] ) );
-				STOREFLOAT( &mpos.cell[a], (LOADFLOAT( &mpos.cell[a] ) > LOADFLOAT( &gmax.cell[a] )) ? LOADFLOAT( &gmax.cell[a] ) : LOADFLOAT( &mpos.cell[a] ) );
+				mpos.cell[a] = mpos.cell[a] < gmin.cell[a] ? gmin.cell[a] : mpos.cell[a];
+				mpos.cell[a] = mpos.cell[a] > gmax.cell[a] ? gmax.cell[a] : mpos.cell[a];
 			}
 			vec3 d = mpos - LOADVEC( &p[i] );
 			float dist = d.x * d.x + d.y * d.y;
@@ -221,10 +223,10 @@ void Game::Tick( float a_DT )
 			// keep away from floor and sides
 			for ( uint a = 0; a < 3; a++ )
 			{
-				if ((LOADFLOAT( &p[i].cell[a] ) - LOADFLOAT( &pr[i] )) < LOADFLOAT( &gmin.cell[a] )) 
-					STOREFLOAT( &p[i].cell[a], LOADFLOAT( &gmin.cell[a] ) + LOADFLOAT( &pr[i] ) );
-				if ((LOADFLOAT( &p[i].cell[a] ) + LOADFLOAT( &pr[i] )) > LOADFLOAT( &gmax.cell[a] )) 
-					STOREFLOAT( &p[i].cell[a], LOADFLOAT( &gmax.cell[a] ) - LOADFLOAT( &pr[i] ) );
+				if ((LOADFLOAT( &p[i].cell[a] ) - LOADFLOAT( &pr[i] )) < gmin.cell[a]) 
+					STOREFLOAT( &p[i].cell[a], gmin.cell[a] + LOADFLOAT( &pr[i] ) );
+				if ((LOADFLOAT( &p[i].cell[a] ) + LOADFLOAT( &pr[i] )) > gmax.cell[a]) 
+					STOREFLOAT( &p[i].cell[a], gmax.cell[a] - LOADFLOAT( &pr[i] ) );
 			}
 		}
 	}
@@ -251,5 +253,6 @@ void Game::Tick( float a_DT )
 		sprite[idx & 3]->Draw( &back, sx - 8, sy - 8 );
 	}
 	// finalize
-	for( int i = 0; i < 655360; i++ ) screen->GetBuffer()[i] = back.GetBuffer()[i];
+	for( int i = 0; i < 655360; i++ ) 
+		STOREINT( &screen->GetBuffer()[i], LOADINT( &back.GetBuffer()[i] ) );
 }
