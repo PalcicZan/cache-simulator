@@ -34,3 +34,6 @@
 /Debug
 /caching_debug.pdb
 /caching_v2_INFOMOV2017.zip
+/Release/caching.tlog
+/Release/cachesim_vs2017.log
+/Release

@@ -251,8 +251,12 @@ void Game::Tick( float a_DT )
 		uint sx = (int)((LOADFLOAT( &pt[idx].x ) * 2000) * reciz + SCRWIDTH / 2);
 		uint sy = (uint)(SCRHEIGHT / 2 - (LOADFLOAT( &pt[idx].y ) * 2000) * reciz);
 		sprite[idx & 3]->Draw( &back, sx - 8, sy - 8 );
-	}
+	}	
 	// finalize
-	for( int i = 0; i < 655360; i++ ) 
-		STOREINT( &screen->GetBuffer()[i], LOADINT( &back.GetBuffer()[i] ) );
+	back.CopyTo(screen, 0, 0);
+	//for (int i = 0; i < 655360; i++)
+		//STOREINT( &screen->GetBuffer()[i], LOADINT( &back.GetBuffer()[i] ) );
+
+	// Print data from cache
+	//CachePerformance();
 }
