@@ -258,5 +258,7 @@ void Game::Tick( float a_DT )
 		//STOREINT( &screen->GetBuffer()[i], LOADINT( &back.GetBuffer()[i] ) );
 
 	// Print data from cache
-	//CachePerformance();
+#ifdef PERFORMANCE
+	CachePerformancePerFrame();
+#endif
 }
