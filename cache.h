@@ -31,19 +31,19 @@ void CachePerformancePerFrame();
 #define LEVEL3_SIZE 32768
 #endif
 
+#define PERFORMANCE
 
 static const char* DEBUG_OFFSET[] = {"", "\t", "\t\t" };
 //#define DEBUG_L2
 //#define DEBUG
-#define PERFORMANCE
 #if defined(DEBUG)
-#define debug(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
-#define debugL2(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
+#define debug(...) do{printf("%s", DEBUG_OFFSET[level-1]); fprintf( stderr,__VA_ARGS__ ); } while( false )
+#define debugL2(...) do{printf("%s", DEBUG_OFFSET[level-1]); fprintf( stderr,__VA_ARGS__ ); } while( false )
 #elif defined(DEBUG_L1)
-#define debug(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
+#define debug(...) do{printf("%s", DEBUG_OFFSET[level-1]); fprintf( stderr,__VA_ARGS__ ); } while( false )
 #elif defined(DEBUG_L2)
 #define debug(...) do{ } while ( false )
-#define debugL2(...) do{ fprintf( stderr,__VA_ARGS__ ); } while( false )
+#define debugL2(level, ...) do{fprintf(stderr,"%s", DEBUG_OFFSET[level-1]); fprintf(stderr,__VA_ARGS__ ); } while( false )
 #else
 #define debug(...) do{ } while ( false )
 #define debugL2(...) do{ } while ( false )
@@ -56,6 +56,7 @@ struct CacheLine
 	bool valid = false, dirty = false;
 };
 
+// A write-back cache with write allocation
 class Cache
 {
 public:
@@ -72,6 +73,8 @@ public:
 private:
 	const uint level, size, nWaySetAssociative;
 
+	void InitCache();
+
 	void LoadLine(uint address, CacheLine& line);
 	void WriteLine(uint address, CacheLine& line);
 	void GetLine(uint address, CacheLine& line);
@@ -85,6 +88,9 @@ private:
 	uint LRU();
 	uint MRU();
 	uint RandomReplacement();
+
+	uint GetMatchinValidLine(CacheLine& set);
+	void WriteDirtyLine(CacheLine& line, uint set);
 	CacheLine **cache;// [NUM_OF_SETS][LEVEL1_N_WAY_SET_ASSOCIATIVE]; //32KB in 512 lines
 	float dummy;
 };
