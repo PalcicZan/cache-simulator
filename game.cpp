@@ -22,6 +22,7 @@ TreeNode* root, *node = (TreeNode*)&RAM[PARTICLES * 29];
 Surface back( SCRWIDTH, SCRHEIGHT, (Pixel*)&RAM[PARTICLES * 40], SCRWIDTH );
 Surface ikea( SCRWIDTH, SCRHEIGHT, (Pixel*)&RAM[2048 * 1024], SCRWIDTH );
 Surface ik_( "assets/back.png" );
+uint nFrame;
 
 inline void radix8 ( uint bit, uint N, uint *source, uint *dest )
 {
@@ -136,6 +137,7 @@ void Game::Init()
 		sprite[3]->GetSurface()->GetBuffer()[x + y * 15] = ScaleColor( 0xffffff, scale );
 	}
 	for( uint i = 0; i < 4; i++ ) sprite[i]->InitializeStartData();
+	nFrame = 0;
 	BuildTree();
 	ik_.CopyTo( &ikea, 0, 0 );
 }
@@ -259,6 +261,8 @@ void Game::Tick( float a_DT )
 
 	// Print data from cache
 #ifdef PERFORMANCE
-	CachePerformancePerFrame();
+	Cache::GetRealTimePerformance(back, nFrame);
+	Cache::GetPerformancePerFrame(nFrame);
 #endif
+	nFrame++;
 }

@@ -9,10 +9,9 @@ void STOREVEC(vec3* a, vec3 t);
 void* LOADPTR(void* a);
 void STOREPTR(void* a, void* p);
 
-void CachePerformancePerFrame();
-
 #define DELAY dummy = min( 10, dummy + sinf( (float)(address / 1789) ) ); // artificial delay
 
+// Cache hierarchy
 #define LEVEL1
 #define LEVEL2
 #define LEVEL3
@@ -20,9 +19,8 @@ void CachePerformancePerFrame();
 #define LEVEL1_N_WAY_SET_ASSOCIATIVE 4
 #define LEVEL1_SIZE 32768
 #define SIZE_OF_CACHE_LINE 64
-#define NUM_OF_SETS (32768 >> 6) >> 2
 
-#ifdef LEVEL2
+#if defined(LEVEL2) || defined(LEVEL3)
 #define LEVEL2_N_WAY_SET_ASSOCIATIVE 4
 #define LEVEL2_SIZE 32768
 #endif
@@ -31,19 +29,26 @@ void CachePerformancePerFrame();
 #define LEVEL3_SIZE 32768
 #endif
 
-#define PERFORMANCE
+// Eviction policy
+#define EP_LRU
+#define EP_RR
+#define EP_FIFO
 
-static const char* DEBUG_OFFSET[] = {"", "\t", "\t\t" };
+// Debug and performance handles
+#define PERFORMANCE
+#define CORRECTNESS
+
+static const char* LEVEL_OFFSET[] = {"", "\t", "\t\t" };
 //#define DEBUG_L2
 //#define DEBUG
 #if defined(DEBUG)
-#define debug(...) do{printf("%s", DEBUG_OFFSET[level-1]); fprintf( stderr,__VA_ARGS__ ); } while( false )
-#define debugL2(...) do{printf("%s", DEBUG_OFFSET[level-1]); fprintf( stderr,__VA_ARGS__ ); } while( false )
+#define debug(...) do{printf("%s", LEVEL_OFFSET[level-1]); fprintf( stderr,__VA_ARGS__ ); } while( false )
+#define debugL2(...) do{printf("%s", LEVEL_OFFSET[level-1]); fprintf( stderr,__VA_ARGS__ ); } while( false )
 #elif defined(DEBUG_L1)
-#define debug(...) do{printf("%s", DEBUG_OFFSET[level-1]); fprintf( stderr,__VA_ARGS__ ); } while( false )
+#define debug(...) do{printf("%s", LEVEL_OFFSET[level-1]); fprintf( stderr,__VA_ARGS__ ); } while( false )
 #elif defined(DEBUG_L2)
 #define debug(...) do{ } while ( false )
-#define debugL2(level, ...) do{fprintf(stderr,"%s", DEBUG_OFFSET[level-1]); fprintf(stderr,__VA_ARGS__ ); } while( false )
+#define debugL2(level, ...) do{fprintf(stderr,"%s", LEVEL_OFFSET[level-1]); fprintf(stderr,__VA_ARGS__ ); } while( false )
 #else
 #define debug(...) do{ } while ( false )
 #define debugL2(...) do{ } while ( false )
@@ -54,6 +59,9 @@ struct CacheLine
 	uint data[16]; // 64 bytes
 	uint tag;
 	bool valid = false, dirty = false;
+#ifdef EP_LRU
+	uint timestamp;
+#endif
 };
 
 // A write-back cache with write allocation
@@ -68,29 +76,36 @@ public:
 	void Write32bit(uint address, uint value);
 	float GetDummyValue() const { return dummy; }
 
-	// Cache performance
-	int readMiss, writeMiss, readCount, writeCount;
+	static void GetPerformancePerFrame(uint nFrame);
+	static void GetRealTimePerformance(Surface gameScreen, uint nFrame);
+	static uint numOfAccessPerFrame, numOfAccess;
+	static Surface realTimeSurface;
+
+
 private:
+	// Init cache
 	const uint level, size, nWaySetAssociative;
-
 	void InitCache();
-
+	// General interfaces
 	void LoadLine(uint address, CacheLine& line);
 	void WriteLine(uint address, CacheLine& line);
+	// Communications cache lines between levels
 	void GetLine(uint address, CacheLine& line);
 	void SetLine(uint address, CacheLine& line);
-
 	// Accessed only by last cache in hierarchy
 	void LoadLineFromMem(uint address, CacheLine& line);
 	void WriteLineToMem(uint address, CacheLine& line);
-	
 	// Eviction policies
-	uint LRU();
-	uint MRU();
-	uint RandomReplacement();
-
+	void UpdateEviction();
+	uint Evict();
+	// Helper functions
 	uint GetMatchinValidLine(CacheLine& set);
 	void WriteDirtyLine(CacheLine& line, uint set);
-	CacheLine **cache;// [NUM_OF_SETS][LEVEL1_N_WAY_SET_ASSOCIATIVE]; //32KB in 512 lines
+	// Performance
+	int readMiss, writeMiss, readCount, writeCount;
+	void ResetPerformanceCounters();
+	void GetPerormance();
+
+	CacheLine **cache;	//[NUM_OF_SETS][LEVEL1_N_WAY_SET_ASSOCIATIVE];
 	float dummy;
 };

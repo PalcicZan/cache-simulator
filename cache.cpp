@@ -1,12 +1,10 @@
 #include	"precomp.h"
-#include <fstream>
 
 // Instantiate the cache
 Cache L1Cache(1, LEVEL1_SIZE, LEVEL1_N_WAY_SET_ASSOCIATIVE);
 Cache L2Cache(2, LEVEL2_SIZE, LEVEL2_N_WAY_SET_ASSOCIATIVE);
 Cache L3Cache(3, LEVEL3_SIZE, LEVEL3_N_WAY_SET_ASSOCIATIVE);
 
-int nFrame;
 // Helper functions; forward all requests to the cache
 uint LOADINT( uint* address ) { return L1Cache.Read32bit( (uint)address ); }
 void STOREINT( uint* address, uint value ) { L1Cache.Write32bit( (uint)address, value ); }
@@ -16,7 +14,7 @@ vec3 LOADVEC( vec3* a ) { vec3 r; for( int i = 0; i < 4; i++ ) r.cell[i] = LOADF
 void STOREVEC( vec3* a, vec3 t ) { for( int i = 0; i < 4; i++ ) { float v = t.cell[i]; STOREFLOAT( (float*)a + i, v ); } }
 void* LOADPTR( void* a ) { uint v = LOADINT( (uint*)a ); return *(void**)&v; }
 void STOREPTR( void* a, void* p ) { uint v = *(uint*)&p; STOREINT( (uint*)a, v ); }
-
+Surface Cache::realTimeSurface(SCRWIDTH, SCRHEIGHT/4);
 // ============================================================================
 // CACHE SIMULATOR IMPLEMENTATION
 // ============================================================================
@@ -67,30 +65,19 @@ uint Cache::Read32bit(uint address)
 	{
 		if (cache[set][slot].tag == tag && cache[set][slot].valid)
 		{
-			debug("Read from cache: %d %d %d %d\n", address, tag, set, offset);
+			debug("Read hit: %d %d %d %d\n", address, tag, set, offset);
 			debugL2(level, "Read value%u\n", cache[set][slot].data[offset >> 2]);
 			return cache[set][slot].data[offset >> 2];
 		}
 	}
 
 	// Cache miss - use eviction policy 
+	debugL2(level, "Read miss: %d %d %d %d\n", address, tag, set, offset);
 	readMiss++;
-	uint slot = RandomReplacement();
-	debugL2(level, "Cache read miss, read from mem: %d %d %d %d\n", address, tag, set, offset);
+	uint slot = Evict();
 
-	/*if (cache[set][slot].dirty)
-	{
-		debugL2(level, "Cache read miss, write to mem: %d %d %d %d\n", cache[set][slot].tag << 13 | set << 6, cache[set][slot].tag, set, 0);
-
-		//__declspec(align(64)) CacheLine line;
-		//line = cache[set][slot];
-		WriteLine((uint)(cache[set][slot].tag << 13 | set << 6), cache[set][slot]);
-	}*/
-	Cache::WriteDirtyLine(cache[set][slot], set);
+	WriteDirtyLine(cache[set][slot], set);
 	LoadLine(address, cache[set][slot]);
-	cache[set][slot].valid = true;
-	cache[set][slot].dirty = false;
-	debugL2(level, "Read value%u\n", cache[set][slot].data[offset >> 2]);
 	return cache[set][slot].data[offset >> 2];
 }
 
@@ -121,7 +108,6 @@ void Cache::Write32bit(uint address, uint value)
 	{
 		if (!cache[set][slot].valid)
 		{
-			//__declspec(align(64)) CacheLine loadLine;
 			LoadLine(address, cache[set][slot]);
 			cache[set][slot].data[offset >> 2] = value; // All dirty
 			cache[set][slot].dirty = true;
@@ -131,20 +117,14 @@ void Cache::Write32bit(uint address, uint value)
 	}
 
 	// Use eviction policy
+	debug("Write miss: %d %d %d %d\n", address, tag, set, offset);
 	writeMiss++;
-	uint slot = RandomReplacement();
-	debug("Cache write miss: %d %d %d %d\n", address, tag, set, offset);
-	// Sloth dirty store whole slot to RAM
-	if (cache[set][slot].dirty)
-	{
-		// Cache write miss: write data to RAM
-		debug("Write old: %d %d %d %d\n", cache[set][slot].tag << 13 | set << 6, tag, set, offset);
-		WriteLine((uint)(cache[set][slot].tag << 13 | set << 6), cache[set][slot]);
-	}
+	uint slot = Evict();
 
+	WriteDirtyLine(cache[set][slot], set);
 	LoadLine(address, cache[set][slot]);
+
 	cache[set][slot].data[offset >> 2] = value;
-	//cache[set][slot].valid = true;
 	cache[set][slot].dirty = true;
 }
 
@@ -179,6 +159,7 @@ void Cache::LoadLine(uint address, CacheLine& line)
 	memcpy(line.data, loadLine.data, SIZE_OF_CACHE_LINE); // fetch 64 bytes into line
 	line.tag = tag;
 	line.valid = true;
+	line.dirty = false;
 }
 
 void Cache::WriteLine(uint address, CacheLine& line)
@@ -228,20 +209,11 @@ void Cache::GetLine(uint address, CacheLine& line)
 	// Cache miss - use eviction policy 
 	readMiss++;
 	debugL2(level, "Read miss: %d %d %d %d\n", address, tag, set, offset);
-	uint slot = RandomReplacement();
+	uint slot = Evict();
+	WriteDirtyLine(cache[set][slot], set);
 
-	if (cache[set][slot].dirty)
-	{
-		debugL2(level, "Write old cache line: %d %d %d %d\n", cache[set][slot].tag << 13 | set << 6, line.tag, set, 0);
-		WriteLine((uint)(cache[set][slot].tag << 13 | set << 6), cache[set][slot]);
-	}
-
-	// Cache read miss: read data from RAM
 	LoadLine(address, cache[set][slot]);
-	cache[set][slot].valid = true;
-	cache[set][slot].dirty = false;
-	memcpy(line.data, cache[set][slot].data, SIZE_OF_CACHE_LINE); // fetch 64 bytes into line
-	return;
+	memcpy(line.data, cache[set][slot].data, SIZE_OF_CACHE_LINE);
 }
 
 void Cache::SetLine(uint address, CacheLine& line)
@@ -270,14 +242,8 @@ void Cache::SetLine(uint address, CacheLine& line)
 	{
 		if (!cache[set][slot].valid)
 		{
-			//__declspec(align(64)) CacheLine loadLine;
-			//LoadLineFromMem(address, loadLine);
-
-			// Store to cache
-			//memcpy(cache[set][slot].data, (void*)loadLine.data, SIZE_OF_CACHE_LINE); // fetch 64 bytes into line
 			memcpy(cache[set][slot].data, (void*)line.data, SIZE_OF_CACHE_LINE);
 			cache[set][slot].tag = tag;
-			//cache[set][slot].data[offset >> 2] = value; // All dirty
 			cache[set][slot].dirty = true;
 			cache[set][slot].valid = true;
 			debug("Write (Not valid): %d %d %d %d\n", address, tag, set, offset);
@@ -287,16 +253,10 @@ void Cache::SetLine(uint address, CacheLine& line)
 
 
 	// Cache miss - use eviction policy
-	writeMiss++;
-	uint slot = RandomReplacement();
 	debugL2(level, "Write miss: %d %d %d %d\n", address, tag, set, offset);
-
-	// Sloth dirty store whole slot to RAM
-	if (cache[set][slot].dirty)
-	{
-		debugL2(level, "Write old: %d %d %d %d\n", cache[set][slot].tag << 13 | set << 6, tag, set, offset);
-		WriteLine((uint)(cache[set][slot].tag << 13 | set << 6), cache[set][slot]);
-	}
+	writeMiss++;
+	uint slot = Evict();
+	WriteDirtyLine(cache[set][slot], set);
 
 	memcpy(cache[set][slot].data, (void*)line.data, SIZE_OF_CACHE_LINE);
 	cache[set][slot].tag = tag;
@@ -308,7 +268,7 @@ void Cache::SetLine(uint address, CacheLine& line)
 // CACHE HELPER FUNCTIONS
 // ============================================================================
 
-void Cache::WriteDirtyLine(CacheLine& line, uint set)
+inline void Cache::WriteDirtyLine(CacheLine& line, uint set)
 {
 	if (line.dirty)
 	{
@@ -321,36 +281,58 @@ void Cache::WriteDirtyLine(CacheLine& line, uint set)
 // CACHE EVICTION POLICIES
 // ============================================================================
 
-uint Cache::RandomReplacement()
+uint Cache::Evict()
 {
+	/*switch (EV_POLICY) {
+	case EV_LRU:
+		
+		break;
+	case EV_RR:
+		break;
+	case EV_FIFO:
+		break
+	}*/
+#ifdef EV_LRU
+	return 0;
+#else
 	return rand() % nWaySetAssociative;
+#endif
 }
-
 
 // ============================================================================
 // CACHE PERFORMANCE ANALYSIS
 // ============================================================================
+void Cache::GetRealTimePerformance(Surface gameScreen, uint nFrame) {
+	uint x = nFrame % SCRWIDTH;
+	realTimeSurface.Line(1, (SCRHEIGHT/4)-3, 1, (SCRHEIGHT / 4) - 6, 0xFF0000);	// Satisfy time
+	//realTimeSurface.Line(x, SCRHEIGHT, x, 100, 0x00FF00);			// Sort time
+	//realTimeSurface.Line(x, SCRHEIGHT, x, 100, 0x0000FF);			// Render time
+	//realTimeSurface.BlendCopyTo(&gameScreen, 0, SCRHEIGHT - SCRHEIGHT/4 - 1);
+}
 
-void CachePerformancePerFrame() {
-	nFrame++;
+void Cache::GetPerformancePerFrame(uint nFrame)
+{
 	printf("============================================================================\n");
 	printf("Frame: %d\n", nFrame);
-	printf("Reads: %d - Reads miss: %d (%.3lf%%)\n", L1Cache.readCount, L1Cache.readMiss,
-													((float)L1Cache.readMiss/L1Cache.readCount) * 100);
-	printf("Write: %d - Write miss: %d (%.3lf%%)\n", L1Cache.writeCount, L1Cache.writeMiss, 
-													((float)L1Cache.writeMiss/L1Cache.writeCount) * 100);
-	printf("	Reads: %d - Reads miss: %d (%.3lf%%)\n", L2Cache.readCount, L2Cache.readMiss,
-													((float)L2Cache.readMiss / L1Cache.readCount) * 100);
-	printf("	Write: %d - Write miss: %d (%.3lf%%)\n", L2Cache.writeCount, L2Cache.writeMiss, 
-													((float)L2Cache.writeMiss / L1Cache.writeCount) * 100);
-	printf("		Reads: %d - Reads miss: %d (%.3lf%%)\n", L3Cache.readCount, L3Cache.readMiss,
-		((float)L3Cache.readMiss / L1Cache.readCount) * 100);
-	printf("		Write: %d - Write miss: %d (%.3lf%%)\n", L3Cache.writeCount, L3Cache.writeMiss,
-		((float)L3Cache.writeMiss / L1Cache.writeCount) * 100);
+	L1Cache.GetPerormance();
+	L2Cache.GetPerormance();
+	L3Cache.GetPerormance();
+	L1Cache.ResetPerformanceCounters();
+	L2Cache.ResetPerformanceCounters();
+	L3Cache.ResetPerformanceCounters();
+}
 
-	L1Cache.readCount = 0, L1Cache.readMiss = 0, L1Cache.writeCount = 0, L1Cache.writeMiss = 0;
-	L2Cache.readCount = 0, L2Cache.readMiss = 0, L2Cache.writeCount = 0, L2Cache.writeMiss = 0;
-	L3Cache.readCount = 0, L3Cache.readMiss = 0, L3Cache.writeCount = 0, L3Cache.writeMiss = 0;
+void Cache::GetPerormance()
+{
+	printf("%sReads: %d - Reads miss: %d (%.3lf%%)\n", LEVEL_OFFSET[level-1], readCount, readMiss,
+		((float)readMiss / L1Cache.readCount) * 100);
+	printf("%sWrite: %d - Write miss: %d (%.3lf%%)\n", LEVEL_OFFSET[level - 1], writeCount, writeMiss,
+		((float)writeMiss / L1Cache.writeCount) * 100);
+}
+
+void Cache::ResetPerformanceCounters()
+{
+	readCount = 0, readMiss = 0, writeCount = 0, writeMiss = 0;
 }
 
 // ============================================================================
