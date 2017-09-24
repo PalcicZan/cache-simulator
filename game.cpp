@@ -261,7 +261,7 @@ void Game::Tick( float a_DT )
 
 	// Print data from cache
 #ifdef PERFORMANCE
-	Cache::GetRealTimePerformance(back, nFrame);
+	Cache::GetRealTimePerformance(screen, nFrame);
 	Cache::GetPerformancePerFrame(nFrame);
 #endif
 	nFrame++;

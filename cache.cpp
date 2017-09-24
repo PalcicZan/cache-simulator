@@ -2,8 +2,13 @@
 
 // Instantiate the cache
 Cache L1Cache(1, LEVEL1_SIZE, LEVEL1_N_WAY_SET_ASSOCIATIVE);
+#if defined(LEVEL2) || defined(LEVEL3)
 Cache L2Cache(2, LEVEL2_SIZE, LEVEL2_N_WAY_SET_ASSOCIATIVE);
+#endif
+#if defined(LEVEL3)
 Cache L3Cache(3, LEVEL3_SIZE, LEVEL3_N_WAY_SET_ASSOCIATIVE);
+#endif
+Surface Cache::realTimeSurface(SCRWIDTH, REAL_TIME_SCRHEIGHT);
 
 // Helper functions; forward all requests to the cache
 uint LOADINT( uint* address ) { return L1Cache.Read32bit( (uint)address ); }
@@ -14,7 +19,6 @@ vec3 LOADVEC( vec3* a ) { vec3 r; for( int i = 0; i < 4; i++ ) r.cell[i] = LOADF
 void STOREVEC( vec3* a, vec3 t ) { for( int i = 0; i < 4; i++ ) { float v = t.cell[i]; STOREFLOAT( (float*)a + i, v ); } }
 void* LOADPTR( void* a ) { uint v = LOADINT( (uint*)a ); return *(void**)&v; }
 void STOREPTR( void* a, void* p ) { uint v = *(uint*)&p; STOREINT( (uint*)a, v ); }
-Surface Cache::realTimeSurface(SCRWIDTH, SCRHEIGHT/4);
 // ============================================================================
 // CACHE SIMULATOR IMPLEMENTATION
 // ============================================================================
@@ -78,6 +82,9 @@ uint Cache::Read32bit(uint address)
 
 	WriteDirtyLine(cache[set][slot], set);
 	LoadLine(address, cache[set][slot]);
+	cache[set][slot].tag = tag;
+	cache[set][slot].valid = true;
+	cache[set][slot].dirty = false;
 	return cache[set][slot].data[offset >> 2];
 }
 
@@ -109,6 +116,9 @@ void Cache::Write32bit(uint address, uint value)
 		if (!cache[set][slot].valid)
 		{
 			LoadLine(address, cache[set][slot]);
+			cache[set][slot].tag = tag;
+			cache[set][slot].valid = true;
+			cache[set][slot].dirty = false;
 			cache[set][slot].data[offset >> 2] = value; // All dirty
 			cache[set][slot].dirty = true;
 			debug("	Cache write (Not valid): %d %d %d %d\n", address, tag, set, offset);
@@ -124,6 +134,9 @@ void Cache::Write32bit(uint address, uint value)
 	WriteDirtyLine(cache[set][slot], set);
 	LoadLine(address, cache[set][slot]);
 
+	cache[set][slot].tag = tag;
+	cache[set][slot].valid = true;
+	cache[set][slot].dirty = false;
 	cache[set][slot].data[offset >> 2] = value;
 	cache[set][slot].dirty = true;
 }
@@ -140,15 +153,15 @@ void Cache::LoadLine(uint address, CacheLine& line)
 	__declspec(align(64)) CacheLine loadLine;
 	switch (level) {
 	case 1:
+#ifdef LEVEL2
 		L2Cache.GetLine(lineAddress, loadLine);
 		break;
+#endif
 	case 2:
 #ifdef LEVEL3
 		L3Cache.GetLine(lineAddress, loadLine);
-#else
-		LoadLineFromMem(lineAddress, loadLine);
-#endif
 		break;
+#endif
 	case 3:
 		LoadLineFromMem(lineAddress, loadLine);
 		break;
@@ -169,15 +182,15 @@ void Cache::WriteLine(uint address, CacheLine& line)
 	debugL2(level, "Level %u cache write: ", level);
 	switch (level) {
 	case 1:
+#if defined(LEVEL2) || defined(LEVEL3)
 		L2Cache.SetLine(address, writeLine);
 		break;
+#endif
 	case 2:
 #ifdef LEVEL3
 		L3Cache.SetLine(address, writeLine);
-#else
-		WriteLineToMem(address, writeLine);
-#endif
 		break;
+#endif
 	case 3:
 		WriteLineToMem(address, writeLine);
 		break;
@@ -283,16 +296,13 @@ inline void Cache::WriteDirtyLine(CacheLine& line, uint set)
 
 uint Cache::Evict()
 {
-	/*switch (EV_POLICY) {
-	case EV_LRU:
-		
-		break;
-	case EV_RR:
-		break;
-	case EV_FIFO:
-		break
-	}*/
 #ifdef EV_LRU
+	return 0;
+#elif defined(EV_FIFO)
+	return 0;
+#elif defined(EV_MRU)
+	return 0;
+#elif defined(EV_SMTH)
 	return 0;
 #else
 	return rand() % nWaySetAssociative;
@@ -302,12 +312,25 @@ uint Cache::Evict()
 // ============================================================================
 // CACHE PERFORMANCE ANALYSIS
 // ============================================================================
-void Cache::GetRealTimePerformance(Surface gameScreen, uint nFrame) {
+void Cache::GetRealTimePerformance(Surface* gameScreen, uint nFrame) {
 	uint x = nFrame % SCRWIDTH;
-	realTimeSurface.Line(1, (SCRHEIGHT/4)-3, 1, (SCRHEIGHT / 4) - 6, 0xFF0000);	// Satisfy time
-	//realTimeSurface.Line(x, SCRHEIGHT, x, 100, 0x00FF00);			// Sort time
-	//realTimeSurface.Line(x, SCRHEIGHT, x, 100, 0x0000FF);			// Render time
-	//realTimeSurface.BlendCopyTo(&gameScreen, 0, SCRHEIGHT - SCRHEIGHT/4 - 1);
+	const float maxPerCache = (float)REAL_TIME_SCRHEIGHT / 3 / 10;
+	float l1 = ((float)L1Cache.readMiss / L1Cache.readCount) * 100;
+	l1 *= maxPerCache;
+	realTimeSurface.Line(x, REAL_TIME_SCRHEIGHT - 1, x, REAL_TIME_SCRHEIGHT - 1 - l1, 0xFF0000);
+
+#if defined(LEVEL2) || defined(LEVEL3)
+	float l2 = ((float)L2Cache.readMiss / L1Cache.readCount) * 100;
+	l2 *= maxPerCache;
+	realTimeSurface.Line(x, REAL_TIME_SCRHEIGHT - 1 - l1, x, REAL_TIME_SCRHEIGHT - 1 - l1 - l2, 0x00FF00);
+#endif
+#if defined(LEVEL3)
+	float l3 = ((float)L3Cache.readMiss / L1Cache.readCount) * 100;
+	l3 *= maxPerCache;
+	realTimeSurface.Line(x, REAL_TIME_SCRHEIGHT - 1 - l1 - l2, x, REAL_TIME_SCRHEIGHT - 1 - l1 - l2 - l3, 0x0000FF);
+#endif
+
+	realTimeSurface.BlendCopyTo(gameScreen, 0, SCRHEIGHT - REAL_TIME_SCRHEIGHT - 1);
 }
 
 void Cache::GetPerformancePerFrame(uint nFrame)
@@ -315,11 +338,20 @@ void Cache::GetPerformancePerFrame(uint nFrame)
 	printf("============================================================================\n");
 	printf("Frame: %d\n", nFrame);
 	L1Cache.GetPerormance();
+
+#if defined(LEVEL2) || defined(LEVEL3)
 	L2Cache.GetPerormance();
+#endif
+#if defined(LEVEL3)
 	L3Cache.GetPerormance();
+#endif
 	L1Cache.ResetPerformanceCounters();
+#if defined(LEVEL2) || defined(LEVEL3)
 	L2Cache.ResetPerformanceCounters();
+#endif
+#if defined(LEVEL3)
 	L3Cache.ResetPerformanceCounters();
+#endif
 }
 
 void Cache::GetPerormance()

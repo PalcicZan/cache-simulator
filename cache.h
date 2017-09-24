@@ -13,8 +13,8 @@ void STOREPTR(void* a, void* p);
 
 // Cache hierarchy
 #define LEVEL1
-#define LEVEL2
-#define LEVEL3
+//#define LEVEL2
+//#define LEVEL3
 
 #define LEVEL1_N_WAY_SET_ASSOCIATIVE 4
 #define LEVEL1_SIZE 32768
@@ -35,7 +35,8 @@ void STOREPTR(void* a, void* p);
 #define EP_FIFO
 
 // Debug and performance handles
-#define PERFORMANCE
+#define REAL_TIME_SCRHEIGHT SCRHEIGHT/4
+//#define PERFORMANCE
 #define CORRECTNESS
 
 static const char* LEVEL_OFFSET[] = {"", "\t", "\t\t" };
@@ -77,7 +78,7 @@ public:
 	float GetDummyValue() const { return dummy; }
 
 	static void GetPerformancePerFrame(uint nFrame);
-	static void GetRealTimePerformance(Surface gameScreen, uint nFrame);
+	static void GetRealTimePerformance(Surface* gameScreen, uint nFrame);
 	static uint numOfAccessPerFrame, numOfAccess;
 	static Surface realTimeSurface;
 
