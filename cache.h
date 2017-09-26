@@ -14,17 +14,16 @@ void STOREPTR(void* a, void* p);
 #define L1 0
 #define L2 1
 #define L3 2
-#define DRAM 3
 
 // Cache hierarchy
-#define NUM_OF_LEVELS 2
+#define NUM_OF_LEVELS 3
 
 #define SIZE_OF_CACHE_LINE 64
 #define LEVEL1_N_WAY_SET_ASSOCIATIVE 4
 #define LEVEL1_SIZE 32768
 
 #if NUM_OF_LEVELS > 1
-#define LEVEL2_N_WAY_SET_ASSOCIATIVE 8 //4
+#define LEVEL2_N_WAY_SET_ASSOCIATIVE 8 //4 //8
 #define LEVEL2_SIZE 262144 //32768 //262144
 #endif
 #if NUM_OF_LEVELS > 2
@@ -33,31 +32,39 @@ void STOREPTR(void* a, void* p);
 #endif
 
 // Eviction policy
-#define EP_LRU
-#define EP_RR
-#define EP_FIFO
+//#define EP_LRU
+//#define EP_RR
+//#define EP_FIFO
+
+// Access penalties
+#define L1_PENALTY 4
+#define L2_PENALTY 11
+#define L3_PENALTY 39
+#define RAM_PENALTY 100
 
 // Debug and performance handles
 #define REAL_TIME_SCRHEIGHT SCRHEIGHT/4
 #define PERFORMANCE
 #define READ 0
 #define WRITE 1
+
 #define MISS 0
 #define WRITE_LINE 1
 #define ALL 2
 
-static const uint COLOR[4] = { 0x00FF00, 0x0000FF, 0x00FFFF , 0xFF0000};
-static const char* LEVEL_OFFSET[] = {"", "\t", "\t\t"};
+static const uint COLOR[4] = { 0x00FF00, 0x0000FF, 0x00FFFF , 0xFF0000 };
+static const char* LEVEL_OFFSET[] = { "", "\t", "\t\t" };
+
 //#define DEBUG_L2
 //#define DEBUG
 #if defined(DEBUG)
-#define debug(...) do{printf("%s", LEVEL_OFFSET[level-1]); fprintf( stderr,__VA_ARGS__ ); } while( false )
-#define debugL2(...) do{printf("%s", LEVEL_OFFSET[level-1]); fprintf( stderr,__VA_ARGS__ ); } while( false )
+#define debug(...) do{printf("%s", LEVEL_OFFSET[level]); fprintf( stderr,__VA_ARGS__ ); } while( false )
+#define debugL2(...) do{printf("%s", LEVEL_OFFSET[level]); fprintf( stderr,__VA_ARGS__ ); } while( false )
 #elif defined(DEBUG_L1)
-#define debug(...) do{printf("%s", LEVEL_OFFSET[level-1]); fprintf( stderr,__VA_ARGS__ ); } while( false )
+#define debug(...) do{printf("%s", LEVEL_OFFSET[level]); fprintf( stderr,__VA_ARGS__ ); } while( false )
 #elif defined(DEBUG_L2)
 #define debug(...) do{ } while ( false )
-#define debugL2(level, ...) do{fprintf(stderr,"%s", LEVEL_OFFSET[level-1]); fprintf(stderr,__VA_ARGS__ ); } while( false )
+#define debugL2(level, ...) do{fprintf(stderr,"%s", LEVEL_OFFSET[level]); fprintf(stderr,__VA_ARGS__ ); } while( false )
 #else
 #define debug(...) do{ } while ( false )
 #define debugL2(...) do{ } while ( false )
@@ -65,10 +72,10 @@ static const char* LEVEL_OFFSET[] = {"", "\t", "\t\t"};
 
 struct CacheLine
 {
-	uint data[16]; // 64 bytes
+	uint data[16];
 	uint tag;
 	bool valid = false, dirty = false;
-#ifdef EP_LRU
+#if defined(EP_LRU) || defined(EP_FIFO)
 	uint timestamp = 0;
 #endif
 };
@@ -87,8 +94,7 @@ public:
 
 	static void GetPerformancePerFrame(uint nFrame);
 	static void GetRealTimePerformance(Surface* gameScreen, uint nFrame);
-	static uint performance[SCRWIDTH][4];
-	static uint numOfAccessPerFrame, numOfAccess;
+	static uint performance[SCRWIDTH][NUM_OF_LEVELS];
 	static Surface realTimeSurface;
 
 private:
@@ -105,24 +111,19 @@ private:
 	void LoadLineFromMem(uint address, CacheLine& line);
 	void WriteLineToMem(uint address, CacheLine& line);
 	// Eviction policies
-	void UpdateEviction(uint set, uint slot);
+	void UpdateEviction(uint set, uint slot, uint tag);
 	uint Evict(uint set);
 	// Helper functions
-	uint GetMatchinValidLine(CacheLine& set);
 	void WriteDirtyLine(CacheLine& line, uint set, uint operation);
 	// Performance
 	void ResetPerformanceCounters();
-	void GetPerformance(const bool withTitles, const bool withOffset);
-
+	void GetPerformance();
+	int counters[2][3];
 	// readMiss means simply not tag or valid in the cache
 	// readMissWriteDirty - write dirty line to next cache level
 	// readCount - all reads
 	// readAccessToNextLevel - counts only if needs to access to next level (multiple per requests counts as one)
-	int counters[2][3];
-	//int writeMiss, writeMissWriteDirty, writeCount;
-	//int readMiss, readMissWriteDirty, readCount;
-	//int readAccessToNextLevel, writeAccessToNextLevel;
 
-	CacheLine **cache;	//[NUM_OF_SETS][LEVEL1_N_WAY_SET_ASSOCIATIVE];
+	CacheLine **cache;
 	float dummy;
 };
