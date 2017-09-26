@@ -30,13 +30,14 @@ inline void radix8 ( uint bit, uint N, uint *source, uint *dest )
 	for( uint i = 0; i < N; i++ ) 
 	{
 		uint s = (LOADINT( &source[i << 1] ) >> bit) & 255;
-		STOREINT( &ballCount[s], LOADINT( &ballCount[s] ) + 1 );
+		STOREINT( &ballCount[s], LOADINT( &ballCount[s] ) + 1 ); 
 	}
 	STOREINT( &index[0], 0 );
 	for( uint i = 1; i < 256; i++ ) STOREINT( &index[i], LOADINT( &index[i - 1] ) + LOADINT( &ballCount[i - 1] ) );
 	for( uint i = 0; i < N; i++ ) 
 	{
-		uint s = source[i << 1], idx = LOADINT( &index[(s >> bit) & 255] );
+		//uint s = source[i << 1], idx = LOADINT( &index[(s >> bit) & 255] );
+		uint s = LOADINT( &source[i << 1]), idx = LOADINT(&index[(s >> bit) & 255]);
 		STOREINT( &index[(s >> bit) & 255], idx + 1 );
 		idx <<= 1;
 		STOREINT( &dest[idx], LOADINT( &source[i << 1] ) );
@@ -256,9 +257,6 @@ void Game::Tick( float a_DT )
 	}	
 	// finalize
 	back.CopyTo(screen, 0, 0);
-	//for (int i = 0; i < 655360; i++)
-		//STOREINT( &screen->GetBuffer()[i], LOADINT( &back.GetBuffer()[i] ) );
-
 	// Print data from cache
 #ifdef PERFORMANCE
 	Cache::GetRealTimePerformance(screen, nFrame);

@@ -11,22 +11,25 @@ void STOREPTR(void* a, void* p);
 
 #define DELAY dummy = min( 10, dummy + sinf( (float)(address / 1789) ) ); // artificial delay
 
-// Cache hierarchy
-#define LEVEL1
-//#define LEVEL2
-//#define LEVEL3
+#define L1 0
+#define L2 1
+#define L3 2
+#define DRAM 3
 
+// Cache hierarchy
+#define NUM_OF_LEVELS 2
+
+#define SIZE_OF_CACHE_LINE 64
 #define LEVEL1_N_WAY_SET_ASSOCIATIVE 4
 #define LEVEL1_SIZE 32768
-#define SIZE_OF_CACHE_LINE 64
 
-#if defined(LEVEL2) || defined(LEVEL3)
-#define LEVEL2_N_WAY_SET_ASSOCIATIVE 4
-#define LEVEL2_SIZE 32768
+#if NUM_OF_LEVELS > 1
+#define LEVEL2_N_WAY_SET_ASSOCIATIVE 8 //4
+#define LEVEL2_SIZE 262144 //32768 //262144
 #endif
-#ifdef LEVEL3
-#define LEVEL3_N_WAY_SET_ASSOCIATIVE 4
-#define LEVEL3_SIZE 32768
+#if NUM_OF_LEVELS > 2
+#define LEVEL3_N_WAY_SET_ASSOCIATIVE 16 //4 16
+#define LEVEL3_SIZE 2097152 //32768 //2097152
 #endif
 
 // Eviction policy
@@ -36,10 +39,15 @@ void STOREPTR(void* a, void* p);
 
 // Debug and performance handles
 #define REAL_TIME_SCRHEIGHT SCRHEIGHT/4
-//#define PERFORMANCE
-#define CORRECTNESS
+#define PERFORMANCE
+#define READ 0
+#define WRITE 1
+#define MISS 0
+#define WRITE_LINE 1
+#define ALL 2
 
-static const char* LEVEL_OFFSET[] = {"", "\t", "\t\t" };
+static const uint COLOR[4] = { 0x00FF00, 0x0000FF, 0x00FFFF , 0xFF0000};
+static const char* LEVEL_OFFSET[] = {"", "\t", "\t\t"};
 //#define DEBUG_L2
 //#define DEBUG
 #if defined(DEBUG)
@@ -61,7 +69,7 @@ struct CacheLine
 	uint tag;
 	bool valid = false, dirty = false;
 #ifdef EP_LRU
-	uint timestamp;
+	uint timestamp = 0;
 #endif
 };
 
@@ -79,33 +87,41 @@ public:
 
 	static void GetPerformancePerFrame(uint nFrame);
 	static void GetRealTimePerformance(Surface* gameScreen, uint nFrame);
+	static uint performance[SCRWIDTH][4];
 	static uint numOfAccessPerFrame, numOfAccess;
 	static Surface realTimeSurface;
 
-
 private:
-	// Init cache
+	// Initialize cache
 	const uint level, size, nWaySetAssociative;
 	void InitCache();
 	// General interfaces
 	void LoadLine(uint address, CacheLine& line);
 	void WriteLine(uint address, CacheLine& line);
-	// Communications cache lines between levels
+	// Communications between levels
 	void GetLine(uint address, CacheLine& line);
 	void SetLine(uint address, CacheLine& line);
 	// Accessed only by last cache in hierarchy
 	void LoadLineFromMem(uint address, CacheLine& line);
 	void WriteLineToMem(uint address, CacheLine& line);
 	// Eviction policies
-	void UpdateEviction();
-	uint Evict();
+	void UpdateEviction(uint set, uint slot);
+	uint Evict(uint set);
 	// Helper functions
 	uint GetMatchinValidLine(CacheLine& set);
-	void WriteDirtyLine(CacheLine& line, uint set);
+	void WriteDirtyLine(CacheLine& line, uint set, uint operation);
 	// Performance
-	int readMiss, writeMiss, readCount, writeCount;
 	void ResetPerformanceCounters();
-	void GetPerormance();
+	void GetPerformance(const bool withTitles, const bool withOffset);
+
+	// readMiss means simply not tag or valid in the cache
+	// readMissWriteDirty - write dirty line to next cache level
+	// readCount - all reads
+	// readAccessToNextLevel - counts only if needs to access to next level (multiple per requests counts as one)
+	int counters[2][3];
+	//int writeMiss, writeMissWriteDirty, writeCount;
+	//int readMiss, readMissWriteDirty, readCount;
+	//int readAccessToNextLevel, writeAccessToNextLevel;
 
 	CacheLine **cache;	//[NUM_OF_SETS][LEVEL1_N_WAY_SET_ASSOCIATIVE];
 	float dummy;
