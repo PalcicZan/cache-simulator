@@ -259,8 +259,8 @@ void Game::Tick( float a_DT )
 	back.CopyTo(screen, 0, 0);
 	// Print data from cache
 #ifdef PERFORMANCE
-	Cache::GetRealTimePerformance(screen, nFrame);
-	Cache::GetPerformancePerFrame(nFrame);
+	Cache::DrawGraphPerformance(screen, nFrame);
+	Cache::GetPerformancePerFrame(screen, nFrame, true);
 #endif
 	nFrame++;
 }
