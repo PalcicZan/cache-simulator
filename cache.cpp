@@ -14,8 +14,6 @@ Cache CPUCache[NUM_OF_LEVELS] = {
 // Performance surface
 Surface Cache::realTimeSurface(SCRWIDTH, REAL_TIME_SCRHEIGHT);
 
-//uint LOADINT(uint* address) { return CPUCache[L1].Read32bit((uint)address); }
-//void STOREINT(uint* address, uint value) { CPUCache[L1].Write32bit((uint)address, value); }
 // Helper functions; forward all requests to the cache
 uint LOADINT(uint* address) { uint value; CPUCache[L1].Read((uintptr_t)address, 4, &value); return value; }
 void STOREINT(uint* address, uint value) { CPUCache[L1].Write((uintptr_t)address, 4, &value); }
@@ -23,7 +21,7 @@ float LOADFLOAT(float* a) { uint v = LOADINT((uint*)a); return *(float*)&v; }
 void STOREFLOAT(float* a, float f) { uint v = *(uint*)&f; STOREINT((uint*)a, v);}
 
 // Support for wider types
-#ifdef _WIN64 || defined(SUPPORT_WIDER_TYPES)
+#if defined(_WIN64) || defined(SUPPORT_WIDER_TYPES)
 void STOREVEC(vec3* a, vec3 t) { CPUCache[L1].Write((uintptr_t)a, sizeof(vec3), &t); }
 vec3 LOADVEC(vec3* a) { vec3 r; CPUCache[L1].Read((uintptr_t)a, sizeof(vec3), &r); return r; };
 void* LOADPTR(void* a) { uintptr_t v; CPUCache[L1].Read((uintptr_t)a, sizeof(uintptr_t), &v); return *(void**)&v; }

@@ -88,14 +88,24 @@ static const char* LEVEL_OFFSET[] = { "", "\t", "\t\t" };
 #define debugL2(...) do{ } while ( false )
 #endif
 
-struct alignas(64) CacheLine
+class CacheLine
 {
-	uint data[16];
+public:
+	uint data[CACHE_LINE_SIZE/4];
 	uintptr_t tag;
 	bool valid = false, dirty = false;
 #if defined(EP_LRU) || defined(EP_FIFO)
 	uint timestamp = 0;
 #endif
+	void* operator new(size_t i)
+	{
+		return _aligned_malloc(i, CACHE_LINE_SIZE);
+	}
+
+	void operator delete(void* p)
+	{
+		_aligned_free(p);
+	}
 };
 
 // A write-back cache with write allocation
