@@ -31,6 +31,7 @@ extern "C"
 #include "surface.h"
 #include "threads.h"
 #include <assert.h>
+#include <time.h>
 
 using namespace std;
 using namespace Tmpl8;

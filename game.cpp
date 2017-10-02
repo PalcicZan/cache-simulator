@@ -147,8 +147,9 @@ void Game::Tick( float a_DT )
 {
 	uint start = GetTickCount();
 	screen->Clear( 0 );
-	for( int i = 0; i < 655360; i++ ) 
-		STOREINT( &back.GetBuffer()[i], LOADINT( &ikea.GetBuffer()[i] ) );
+	/*for( int i = 0; i < 655360; i++ ) 
+		STOREINT( &back.GetBuffer()[i], LOADINT( &ikea.GetBuffer()[i] ) );*/
+	ikea.CopyTo(&back, 0, 0);
 	if (GetAsyncKeyState( VK_LEFT )) { r -= 1.8f; if (r < 0) r += 360; }
 	if (GetAsyncKeyState( VK_RIGHT )) { r += 1.8f; if (r > 360) r -= 360; }
 	if (GetAsyncKeyState( VK_UP )) { r2 -= 1.8f; if (r2 < 0) r2 += 360; }
@@ -258,9 +259,11 @@ void Game::Tick( float a_DT )
 	// finalize
 	back.CopyTo(screen, 0, 0);
 	// Print data from cache
-#ifdef PERFORMANCE
+#ifdef SHOW_GRAPH
 	Cache::DrawGraphPerformance(screen, nFrame);
-	Cache::GetPerformancePerFrame(screen, nFrame, true);
+#endif
+#ifdef SHOW_PERFORMANCE
+	Cache::GetPerformancePerFrame(screen, nFrame);
 #endif
 	nFrame++;
 }
