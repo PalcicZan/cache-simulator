@@ -98,7 +98,6 @@ void Cache::Read(const uintptr_t address, const uint size, void* data)
 		if (cache[set][slot].tag == tag && cache[set][slot].valid)
 		{
 			LOG(level, "Read hit: %d %d %d %d\n", address, tag, set, offset);
-			LOG(level, "Read value %u\n", cache[set][slot].data[offset]);
 			UpdateEviction(set, slot, tag);
 			memcpy(data, &cache[set][slot].data[offset], size);
 			return;
@@ -132,7 +131,7 @@ void Cache::Write(const uintptr_t address, const uint size, const void* value)
 			UpdateEviction(set, slot, tag);
 			memcpy(&cache[set][slot].data[offset], value, size);
 			cache[set][slot].dirty = true;
-			LOG(level,"	Cache write: %d %d %d %d\n", address, tag, set, offset);
+			LOG(level,"Cache write: %d %d %d %d\n", address, tag, set, offset);
 			return;
 		}
 	}
@@ -153,7 +152,7 @@ void Cache::Write(const uintptr_t address, const uint size, const void* value)
 			cache[set][slot].tag = tag;
 			cache[set][slot].dirty = true;
 			cache[set][slot].valid = true;
-			LOG(level, "	Cache write (Not valid): %d %d %d %d\n", address, tag, set, offset);
+			LOG(level, "Cache write (Not valid): %d %d %d %d\n", address, tag, set, offset);
 			return;
 		}
 	}
@@ -195,7 +194,6 @@ void Cache::LoadLine(const uintptr_t address, CacheLine& line)
 		LoadLineFromMem(lineAddress, loadLine);
 		break;
 	default:
-		printf("FUCK");
 		LoadLineFromMem(lineAddress, loadLine);
 		break;
 	}
@@ -243,7 +241,7 @@ void Cache::WriteDirtyLine(CacheLine& line, uint set, uint operation)
 	{
 		counters[operation][WRITE_LINE]++;
 		WriteLine((line.tag << 13 | set << 6), line);
-		LOG(level, "Cache read miss, write to mem: %d %d %d\n", line.tag << 13 | set << 6, line.tag, set);
+		LOG(level, "Cache miss, write to mem: %d %d %d\n", line.tag << 13 | set << 6, line.tag, set);
 	}
 }
 
@@ -291,10 +289,7 @@ inline void Cache::UpdateEviction(uint set, uint accessedSlot, uintptr_t tag)
 	{
 		if (cache[set][slot].timestamp > previousTimestamp)
 			cache[set][slot].timestamp--;
-		LOG(level, "%u ", cache[set][slot].timestamp);
 	}
-	LOG(level, "\n");
-	LOG(level, "%u %u\n",accessedSlot, cache[set][accessedSlot].timestamp);
 	cache[set][accessedSlot].timestamp = nWaySetAssociative - 1;
 #elif EVICTION_POLICY == EP_FIFO
 	if (tag == cache[set][accessedSlot].tag) return;
@@ -337,21 +332,19 @@ void Cache::DrawGraphPerformance(Surface* gameScreen, const uint nFrame)
 		performance[width][level] = (float)selectedMeasurement;
 	}
 
-#if INCLUDE_DRAM == 1 && SELECTED_PERFORMANCE == N_ACCESSES
+#if ((INCLUDE_DRAM) == 1) && (SELECTED_PERFORMANCE == N_ACCESSES)
 	// Add DRAM access
-	selectedMeasurement = CPUCache[NUM_OF_LEVELS - 1].counters[READ][MISS] +
+	selectedMeasurement = (float)(CPUCache[NUM_OF_LEVELS - 1].counters[READ][MISS] +
 		CPUCache[NUM_OF_LEVELS - 1].counters[WRITE][WRITE_LINE] +
-		CPUCache[NUM_OF_LEVELS - 1].counters[READ][WRITE_LINE];
+		CPUCache[NUM_OF_LEVELS - 1].counters[READ][WRITE_LINE]);
 	sumOfMeasurement += selectedMeasurement;
-	performance[width][NUM_OF_LEVELS] = (float)selectedMeasurement;
+	performance[width][NUM_OF_LEVELS] = selectedMeasurement;
 #endif
 
 	// Rescale history if new max
-	//bool newMax = max < sumOfMeasurement;
 	if (max < sumOfMeasurement)
 		max = sumOfMeasurement + max / 10;
 
-	//bool offset = outFrame;
 	// Scale history - brute forced every time - I know it doesn't need to be - Optimization opportunity
 	for (uint x = 0; x <= width; x++)
 	{		
@@ -365,7 +358,6 @@ void Cache::DrawGraphPerformance(Surface* gameScreen, const uint nFrame)
 			acc += lineHeight;
 		}
 	}
-
 	// Render new graph
 #ifdef BLEND_PERFORMANCE
 	realTimeSurface.BlendCopyTo(gameScreen, 0, SCRHEIGHT - REAL_TIME_SCRHEIGHT);
@@ -391,10 +383,6 @@ void Cache::GetPerformancePerFrame(Surface* gameScreen, const uint nFrame)
 	CPUCache[L1].measurement[PERFORMANCE_AMAT] = AMAT; // Just to print in cache one performance
 	sprintf(t, "AMAT: %4.2f cycles", AMAT);
 	gameScreen->Print(t, 2, 12, 0xffffff);
-	/*AMAT = ((CPUCache[L1].counters[READ][ALL] + CPUCache[L1].counters[WRITE][ALL])*L1_PENALTY +
-		(CPUCache[L2].counters[READ][ALL] + CPUCache[L2].counters[WRITE][ALL])*L2_PENALTY +
-			(CPUCache[L3].counters[READ][ALL] + CPUCache[L3].counters[WRITE][ALL])*L3_PENALTY +
-			(CPUCache[L3].readMiss + CPUCache[L3].writeMiss)*RAM_PENALTY);*/
 	sprintf(t, "Graph presenting %s.", PERFORMANCE_LABELS[SELECTED_PERFORMANCE]);
 	gameScreen->Print(t, 2, 22, 0xffffff);
 	int acc = 32;
@@ -486,7 +474,6 @@ uint* RAM = (uint*)MALLOC64(20 * 1024 * 1024); // simulated RAM
 // load a cache line from memory; simulate RAM latency
 void Cache::LoadLineFromMem(const uintptr_t address, CacheLine& line)
 {
-	LOG(level, "LOAD FROM MEM!!!\n");
 	memcpy(line.data, (void*)address, CACHE_LINE_SIZE); // fetch 64 bytes into line
 	DELAY;
 }
@@ -494,7 +481,6 @@ void Cache::LoadLineFromMem(const uintptr_t address, CacheLine& line)
 // write a cache line to memory; simulate RAM latency
 void Cache::WriteLineToMem(const uintptr_t address, CacheLine& line)
 {
-	LOG(level, "WRITE TO MEM!!!\n");
 	memcpy((void*)address, line.data, CACHE_LINE_SIZE); // fetch 64 bytes into line
 	DELAY;
 }

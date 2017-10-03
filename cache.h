@@ -9,7 +9,7 @@ void STOREVEC(vec3* a, vec3 t);
 void* LOADPTR(void* a);
 void STOREPTR(void* a, void* p);
 // ============================================================================
-// DEFINES PREHIBIT TO CHANGE
+// DEFINES PROHIBIT TO CHANGE
 // ============================================================================
 
 #define DELAY dummy = min( 10, dummy + sinf( (float)(address / 1789) ) ); // artificial delay
@@ -61,7 +61,10 @@ void STOREPTR(void* a, void* p);
 // Select eviction policy
 #define EVICTION_POLICY EP_LRU
 
-// Define access penalties
+/*
+* Define access penalties 
+* e.g. penalty L2 if penalty to access L2 cache from L1.
+*/
 #define RAM_PENALTY 100
 #define L1_PENALTY 4
 #if NUM_OF_LEVELS == 1
@@ -81,18 +84,18 @@ void STOREPTR(void* a, void* p);
 /*
 SELECTED_PERFORMANCE can have these values
  - PERFORMANCE_AMAT - Average memory access time
- - LOCAL_MISS_RATE 1 - Local miss rate on individual cache level - if higher than 100% means it's because for each access you get more than one access to lower level.
+ - LOCAL_MISS_RATE 1 - Local miss rate on individual cache level
  - GLOBAL_MISS_RATE 2 - Global miss rate on individual cache level - of all accesses to cache L1
  - READ_MISS 3
  - WRITE_MISS 4 
  - N_ACCESSES 5 - Number of accesses to each cache level
 */
-#define SELECTED_PERFORMANCE PERFORMANCE_AMAT 
+#define SELECTED_PERFORMANCE N_ACCESSES 
 #define SHOW_PERFORMANCE
 
 #ifdef SHOW_PERFORMANCE
 #define SHOW_GRAPH
-#define SAVE_PERFORMANCE
+//#define SAVE_PERFORMANCE
 //#define BLEND_PERFORMANCE
 // Types of graph performances 
 #if SELECTED_PERFORMANCE != PERFORMANCE_AMAT
@@ -101,13 +104,13 @@ SELECTED_PERFORMANCE can have these values
 #endif
 #define INCLUDE_DRAM SELECTED_PERFORMANCE == N_ACCESSES
 
-static const char* FILE_NAME = "AMAT_LRU_64.csv";
+static const char* FILE_NAME = "NAccesses.csv";
 static const char* LEVEL_OFFSET[] = { "", "\t", "\t\t" };
 static const char* LEVEL_LABELS[] = { "L1", "L2", "L3", "DRAM", "AMAT" };
 static const char* EVICTION_LABELS[] = { "Random Replacement (RR)", "Least recently used (LRU)", "First In First Out (FIFO)", "Most recently used (MRU)" };
 static const char* PERFORMANCE_LABELS[] = { "AMAT", "LOCAL MISS RATE", "GLOBAL MISS RATE", "READ MISS", "WRITE MISS", "NUM OF ACCESSES" };
 static const uint COLOR[5] = { 0x90AFC5, 0x336B87, 0x2A3132 , 0x763626, 0x90AFC5 };
-
+//static const uint COLOR[5] = { 0x70AD47, 0xFFC000, 0xED7D31 , 0x7F6000, 0x70AD47 };
 // Logging
 //#define ENABLE_LOG
 #ifdef ENABLE_LOG
@@ -165,8 +168,6 @@ private:
 	// Accessed only by last cache in hierarchy
 	void LoadLineFromMem(const uintptr_t address, CacheLine& line);
 	void WriteLineToMem(const uintptr_t address, CacheLine& line);
-
-
 	// Eviction policies
 	inline void UpdateEviction(uint set, uint slot, uintptr_t tag);
 	inline uint Evict(uint set);
@@ -179,10 +180,7 @@ private:
 
 	float measurement[6];
 	int counters[2][3];
-	// readMiss means simply not tag or valid in the cache
-	// readMissWriteDirty - write dirty line to next cache level
-	// readCount - all reads
-	// readAccessToNextLevel - counts only if needs to access to next level (multiple per requests counts as one)
+
 	CacheLine **cache;
 	float dummy;
 };
